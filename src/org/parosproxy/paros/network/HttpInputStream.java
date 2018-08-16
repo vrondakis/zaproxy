@@ -2,19 +2,19 @@
  * Created on May 29, 2004
  *
  * Paros and its related class files.
- * 
+ *
  * Paros is an HTTP/HTTPS proxy for assessing web application security.
  * Copyright (C) 2003-2004 Chinotec Technologies Company
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the Clarified Artistic License
  * as published by the Free Software Foundation.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * Clarified Artistic License for more details.
- * 
+ *
  * You should have received a copy of the Clarified Artistic License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
@@ -45,54 +45,54 @@ public class HttpInputStream extends BufferedInputStream {
 	private static final String LF = "\n";
 	private static final String LF2 = LF + LF;
 
-//	private BufferedInputStream in = null;
+	//	private BufferedInputStream in = null;
 	private byte[] mBuffer = new byte[BUFFER_SIZE];
 	private Socket mSocket = null;
-	
+
 	public HttpInputStream(Socket socket) throws IOException {
-	    super(socket.getInputStream(), BUFFER_SIZE);
+		super(socket.getInputStream(), BUFFER_SIZE);
 		setSocket(socket);
 		//this.in = new BufferedInputStream(mSocket.getInputStream());
 	}
-	
+
 	public HttpRequestHeader readRequestHeader(boolean isSecure) throws HttpMalformedHeaderException, IOException {
 		String msg = "";
 		HttpRequestHeader httpRequestHeader = null;
-		
+
 		msg = readHeader();
 		if (msg.length() == 0) {
-    		log.debug("Read 0 bytes from upstream. Could not read header!");
+			log.debug("Read 0 bytes from upstream. Could not read header!");
 			throw new IOException();
 		}
-		
-		httpRequestHeader = new HttpRequestHeader(msg, isSecure); 
-		
+
+		httpRequestHeader = new HttpRequestHeader(msg, isSecure);
+
 		return httpRequestHeader;
 	}
 
-    
+
 	public synchronized String readHeader() throws IOException {
 		String msg = "";
-        int		oneByte = -1;
-        boolean eoh = false;
-        StringBuilder sb = new StringBuilder(200);
-        
-        do {
-            oneByte = super.read();
-        	
-        	if (oneByte == -1) {
-        		eoh = true;
-				break;
-        	}
-            sb.append((char) oneByte);
+		int		oneByte = -1;
+		boolean eoh = false;
+		StringBuilder sb = new StringBuilder(200);
 
-            if (((char) oneByte) == '\n' && isHeaderEnd(sb)) {
-                eoh = true;
-                msg = sb.toString();
-            }
+		do {
+			oneByte = super.read();
+
+			if (oneByte == -1) {
+				eoh = true;
+				break;
+			}
+			sb.append((char) oneByte);
+
+			if (((char) oneByte) == '\n' && isHeaderEnd(sb)) {
+				eoh = true;
+				msg = sb.toString();
+			}
 		} while (!eoh);
-        
-        return msg;
+
+		return msg;
 
 	}
 
@@ -108,13 +108,13 @@ public class HttpInputStream extends BufferedInputStream {
 				return true;
 			}
 		}
-	
+
 		if (len > 4) {
 			if (CRLF2.equals(sb.substring(len-4))) {
 				return true;
 			}
 		}
-	
+
 		return false;
 	}
 
@@ -124,13 +124,12 @@ public class HttpInputStream extends BufferedInputStream {
 	 * @return Http body
 	 */
 	public synchronized HttpRequestBody readRequestBody(HttpHeader httpHeader) {
-
 		int contentLength = httpHeader.getContentLength();	// -1 = default to unlimited length until connection close
-		
 		HttpRequestBody body = (contentLength > 0) ? new HttpRequestBody(contentLength) : new HttpRequestBody();
-		
+
 		readBody(contentLength, body);
-		
+
+
 		return body;
 	}
 
@@ -142,43 +141,45 @@ public class HttpInputStream extends BufferedInputStream {
 	public synchronized HttpResponseBody readResponseBody(HttpHeader httpHeader) {
 
 		int contentLength = httpHeader.getContentLength();	// -1 = default to unlimited length until connection close
-		
+
 		HttpResponseBody body = (contentLength > 0) ? new HttpResponseBody(contentLength) : new HttpResponseBody();
-		
+
 		readBody(contentLength, body);
-		
+
 		return body;
 	}
 
+	// mani fix
 	private void readBody(int contentLength, HttpBody body) {
-		
 		int readBodyLength = 0;
 		int len = 0;
-		
+
+
+		if(contentLength == 0) contentLength = -1;
 		try {
 			while (contentLength == -1 || readBodyLength < contentLength) {
+
 				len = readBody(contentLength, readBodyLength, mBuffer);	// use mBuffer to avoid locally create too many data buffer
-                if (len > 0) {
+				if (len > 0) {
 					readBodyLength += len;
 				} else if (len < 0) {
 					// ZAP: FindBugs fix
 					break;
 				}
+
 				body.append(mBuffer, len);
 			}
 		} catch (IOException e) {
 			// read until IO error occur - eg connection close
+			body.append("\r\n");
+			body.setBody(body.toString().replaceAll("(?<!\r)\n", HttpHeader.CRLF));
 		}
+
+		//body.append("\r\n");
+
+
 	}
-	
-	/**
-	 * 
-	 * @param contentLength		Content length read to be read.  -1 = unlimited until connection close.
-	 * @param readBodyLength 	Body length read so far
-	 * @param buffer			Buffer storing the read bytes.
-	 * @return					Number of bytes read in buffer
-	 * @throws IOException
-	 */
+
 	private int readBody(int contentLength, int readBodyLength, byte[] buffer) throws IOException {
 
 		int len = 0;
@@ -187,6 +188,7 @@ public class HttpInputStream extends BufferedInputStream {
 		if (contentLength == -1) {
 //			len = in.read(buffer);
 			len = super.read(buffer);
+
 
 		} else {
 			remainingLen = contentLength - readBodyLength;
@@ -204,7 +206,7 @@ public class HttpInputStream extends BufferedInputStream {
 
 		return len;
 	}
-	
+
 	public void setSocket(Socket socket) {
 		mSocket = socket;
 	}
@@ -231,24 +233,24 @@ public class HttpInputStream extends BufferedInputStream {
 				mSocket.setSoTimeout(timeout);
 			}
 		}
-		
+
 		return avail;
 	}
-	
+
 	@Override
 	public int read() throws IOException {
 		//return in.read();
 		return super.read();
 
 	}
-	
+
 	@Override
 	public int read(byte[] b) throws IOException {
 
 		return super.read(b);
 
 	}
-	
+
 	@Override
 	public int read(byte[] b, int off, int len) throws IOException {
 
@@ -260,9 +262,9 @@ public class HttpInputStream extends BufferedInputStream {
 	public void close() {
 		try {
 
-		    super.close();
+			super.close();
 		} catch (Exception e) {
-			
+
 		}
 	}
 }
